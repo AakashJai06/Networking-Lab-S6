@@ -1,50 +1,50 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
+#include <string.h>
 #include <arpa/inet.h>
 
 #define PORT 5035
-#define MAX 60
+#define BUFFER_SIZE 1024
 
 int main() {
-    int sockfd, newsockfd;
-    struct sockaddr_in serv_addr, cli_addr;
-    socklen_t clilen;
-    char filename[MAX], buffer[4096];
+    int serverSocket, clientSocket;
+    struct sockaddr_in serverAddr, clientAddr;
+    char filename[BUFFER_SIZE], buffer[BUFFER_SIZE];
     FILE *file;
+    socklen_t len = sizeof(clientAddr);
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(PORT);
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(PORT);
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    bind(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-    listen(sockfd, 5);
+    bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+    listen(serverSocket, 5);
+    printf("Waiting for client...\n");
 
-    printf("Server listening on port %d...\n", PORT);
-    clilen = sizeof(cli_addr);
-    newsockfd = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
+    clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &len);
+    printf("Client connected!\n");
 
-    read(newsockfd, filename, MAX);
+    recv(clientSocket, filename, BUFFER_SIZE, 0);
     printf("Requested file: %s\n", filename);
 
     file = fopen(filename, "r");
     if (!file) {
-        perror("File open failed");
-        close(newsockfd);
-        close(sockfd);
-        return 1;
+        printf("File not found!\n");
+        strcpy(buffer, "ERROR: File not found.\n");
+        send(clientSocket, buffer, strlen(buffer), 0);
+    } else {
+        while (fgets(buffer, BUFFER_SIZE, file)) {
+            send(clientSocket, buffer, strlen(buffer), 0);
+            usleep(10000);  // short delay to avoid flooding
+        }
+        fclose(file);
     }
 
-    while (fgets(buffer, sizeof(buffer), file) != NULL) {
-        write(newsockfd, buffer, MAX);
-    }
-
-    fclose(file);
-    close(newsockfd);
-    close(sockfd);
-    printf("File sent successfully.\n");
+    printf("File transfer complete.\n");
+    close(clientSocket);
+    close(serverSocket);
     return 0;
 }
